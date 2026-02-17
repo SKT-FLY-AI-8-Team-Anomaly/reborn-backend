@@ -24,6 +24,8 @@ async function bootstrap() {
     .setDescription('Reborn 백엔드 API 문서')
     .setVersion('1.0')
     .addTag('users', '회원 관련')
+    .addTag('auth', '인증')
+    .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);

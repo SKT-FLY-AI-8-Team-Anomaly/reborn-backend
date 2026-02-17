@@ -18,6 +18,10 @@ export class UsersService {
     private readonly userRepository: Repository<User>,
   ) {}
 
+  async findByNickname(nickname: string): Promise<User | null> {
+    return this.userRepository.findOne({ where: { nickname } });
+  }
+
   async signUp(dto: CreateUserDto): Promise<{ id: number; nickname: string }> {
     if (dto.password !== dto.passwordConfirm) {
       throw new BadRequestException('비밀번호가 일치하지 않습니다.');
