@@ -75,6 +75,39 @@ export class AzureStorageService {
     return { uploadUrl, blobUrl };
   }
 
+  /** 읽기 SAS 기본 유효 기간: 1년 (분) */
+  private static readonly READ_SAS_EXPIRY_MINUTES = 365 * 24 * 60;
+
+  /**
+   * 저장된 blob URL에 읽기 전용 SAS를 붙여 프론트에서 접근 가능한 URL 반환
+   * @param blobUrl DB에 저장된 blob URL (예: https://account.../container/profiles/2/uuid.png)
+   * @param expiryMinutes 유효 시간 (기본 1년)
+   */
+  createReadSasUrl(
+    blobUrl: string,
+    expiryMinutes: number = AzureStorageService.READ_SAS_EXPIRY_MINUTES,
+  ): string {
+    const prefix = `https://${this.accountName}.blob.core.windows.net/${this.containerName}/`;
+    if (!blobUrl.startsWith(prefix)) {
+      return blobUrl;
+    }
+    const blobPath = blobUrl.slice(prefix.length);
+    const expiresOn = new Date();
+    expiresOn.setMinutes(expiresOn.getMinutes() + expiryMinutes);
+    const sasOptions = {
+      containerName: this.containerName,
+      blobName: blobPath,
+      permissions: BlobSASPermissions.parse('r'), // read only
+      startsOn: new Date(),
+      expiresOn,
+    };
+    const sasToken = generateBlobSASQueryParameters(
+      sasOptions,
+      this.credential,
+    ).toString();
+    return `${blobUrl}?${sasToken}`;
+  }
+
   /**
    * 캐릭터용 4방향 blob에 대한 업로드 SAS URL 4개 생성
    * @param prefix 컨테이너 안 상위 경로 (예: "userId/token")

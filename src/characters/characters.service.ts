@@ -24,18 +24,27 @@ export class CharactersService {
     private readonly aiService: AiService,
   ) {}
 
-  /** 프로필 생성 (동기) - AI 호출 후 profileUrl 반환 */
-  async generateProfile(userId: number, imageBase64: string) {
+  /** base64 또는 Buffer → Buffer (data URL prefix 제거) */
+  private toImageBuffer(image: Buffer | string): Buffer {
+    if (Buffer.isBuffer(image)) return image;
+    const raw = image.replace(/^data:image\/[^;]+;base64,/, '');
+    return Buffer.from(raw, 'base64');
+  }
+
+  /** 프로필 생성 (동기) - 이미지 파일/Buffer로 AI 호출 후 profileUrl 반환 */
+  async generateProfile(userId: number, image: Buffer | string) {
+    const imageBuffer = this.toImageBuffer(image);
     const blobPath = `profiles/${userId}/${randomUUID()}.png`;
     const { uploadUrl, blobUrl } = this.azureStorage.createUploadSasUrl(blobPath);
 
     await this.aiService.generateProfile({
-      sourceImage: imageBase64,
+      imageBuffer,
       uploadUrl,
       blobUrl,
     });
 
-    return { profileUrl: blobUrl };
+    // 프론트에서 이미지 표시 가능하도록 읽기 SAS URL 반환 (DB에는 저장 안 함)
+    return { profileUrl: this.azureStorage.createReadSasUrl(blobUrl) };
   }
 
   /** 수락 → motion-queue에 job 추가 */
@@ -44,10 +53,13 @@ export class CharactersService {
     const prefix = `motion/${userId}/${jobId}`;
     const urls = this.azureStorage.createCharacterUploadSasUrls(prefix);
 
+    // SAS가 붙은 URL이 와도 DB에는 blob 기본 URL만 저장
+    const profileUrlForStorage = profileUrl.split('?')[0];
+
     const pending = this.characterPendingRepo.create({
       jobId,
       userId,
-      profileUrl,
+      profileUrl: profileUrlForStorage,
       status: CharacterPendingStatus.MOTION_PROCESSING,
     });
     await this.characterPendingRepo.save(pending);
@@ -57,7 +69,7 @@ export class CharactersService {
       {
         jobId,
         userId,
-        profileUrl,
+        profileUrl: profileUrlForStorage,
         uploadUrls: {
           front: urls.front.uploadUrl,
           back: urls.back.uploadUrl,
@@ -90,14 +102,18 @@ export class CharactersService {
       throw new NotFoundException('대기 중인 캐릭터를 찾을 수 없습니다.');
     }
 
+    // 프론트에서 이미지 표시 가능하도록 읽기 SAS URL로 반환
+    const toReadUrl = (url: string | null) =>
+      url ? this.azureStorage.createReadSasUrl(url) : null;
+
     return {
       jobId,
       status: pending.status,
-      profileUrl: pending.profileUrl,
-      frontUrl: pending.frontUrl,
-      backUrl: pending.backUrl,
-      leftUrl: pending.leftUrl,
-      rightUrl: pending.rightUrl,
+      profileUrl: toReadUrl(pending.profileUrl),
+      frontUrl: toReadUrl(pending.frontUrl),
+      backUrl: toReadUrl(pending.backUrl),
+      leftUrl: toReadUrl(pending.leftUrl),
+      rightUrl: toReadUrl(pending.rightUrl),
     };
   }
 }

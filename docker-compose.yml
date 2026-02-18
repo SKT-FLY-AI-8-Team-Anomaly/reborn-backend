@@ -35,6 +35,8 @@ services:
       DB_PORT: 3306
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      # Docker 안에서 호스트 PC의 AI 서버 접근 (localhost → host.docker.internal)
+      AI_BASE_URL: http://host.docker.internal:8000
     depends_on:
       mysql:
         condition: service_healthy

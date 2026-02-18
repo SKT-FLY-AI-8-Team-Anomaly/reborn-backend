@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-/** 프로필 생성 요청 (FastAPI AI에 전달) */
+/** 프로필 생성 요청 (FastAPI AI에 전달) - 이미지 파일 + 메타 */
 export interface ProfileGenerationRequest {
-  sourceImage: string; // base64
+  /** 이미지 바이너리 (multipart로 전달) */
+  imageBuffer: Buffer;
   uploadUrl: string;
   blobUrl: string;
 }
@@ -32,18 +33,6 @@ export class AiService {
       this.config.get('AI_MOCK', 'false').toLowerCase() === 'true';
   }
 
-  /** base64 문자열에서 순수 base64 부분만 추출 */
-  private stripBase64Prefix(str: string): string {
-    const match = str.match(/^data:image\/[^;]+;base64,(.+)$/);
-    return match ? match[1] : str;
-  }
-
-  /** base64 → Buffer */
-  private base64ToBuffer(base64: string): Buffer {
-    const raw = this.stripBase64Prefix(base64);
-    return Buffer.from(raw, 'base64');
-  }
-
   /** SAS URL로 이미지 PUT 업로드 */
   private async putImage(uploadUrl: string, buffer: Buffer): Promise<void> {
     const res = await fetch(uploadUrl, {
@@ -61,18 +50,18 @@ export class AiService {
     }
   }
 
-  /** 프로필 1장 생성 - AI가 blob에 업로드 */
+  /** 프로필 1장 생성 - 외부 AI 서버 POST /profile 로 multipart 전송 (mock 없음) */
   async generateProfile(req: ProfileGenerationRequest): Promise<void> {
-    if (this.isMock) {
-      const buffer = this.base64ToBuffer(req.sourceImage);
-      await this.putImage(req.uploadUrl, buffer);
-      return;
-    }
+    const { imageBuffer, uploadUrl, blobUrl } = req;
+
+    const form = new FormData();
+    form.append('image', new Blob([new Uint8Array(imageBuffer)], { type: 'image/png' }), 'image.png');
+    form.append('uploadUrl', uploadUrl);
+    form.append('blobUrl', blobUrl);
 
     const res = await fetch(`${this.baseUrl}/profile`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(req),
+      body: form,
     });
     if (!res.ok) {
       const text = await res.text();

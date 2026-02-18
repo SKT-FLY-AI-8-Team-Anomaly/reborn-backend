@@ -49,8 +49,7 @@ export class CharactersController {
     if (!file?.buffer) {
       throw new BadRequestException('image 파일이 필요합니다.');
     }
-    const imageBase64 = file.buffer.toString('base64');
-    return this.charactersService.generateProfile(userId, imageBase64);
+    return this.charactersService.generateProfile(userId, file.buffer);
   }
 
   /** 프로필 생성 (동기) - JSON base64 */
