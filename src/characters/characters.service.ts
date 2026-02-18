@@ -47,11 +47,11 @@ export class CharactersService {
     return { profileUrl: this.azureStorage.createReadSasUrl(blobUrl) };
   }
 
-  /** 수락 → motion-queue에 job 추가 */
+  /** 수락 → motion-queue에 job 추가 (모션 시트 1장 생성) */
   async accept(userId: number, profileUrl: string) {
     const jobId = randomUUID();
     const prefix = `motion/${userId}/${jobId}`;
-    const urls = this.azureStorage.createCharacterUploadSasUrls(prefix);
+    const { uploadUrl, blobUrl } = this.azureStorage.createMotionSheetUploadSasUrl(prefix);
 
     // SAS가 붙은 URL이 와도 DB에는 blob 기본 URL만 저장
     const profileUrlForStorage = profileUrl.split('?')[0];
@@ -70,18 +70,8 @@ export class CharactersService {
         jobId,
         userId,
         profileUrl: profileUrlForStorage,
-        uploadUrls: {
-          front: urls.front.uploadUrl,
-          back: urls.back.uploadUrl,
-          left: urls.left.uploadUrl,
-          right: urls.right.uploadUrl,
-        },
-        blobUrls: {
-          front: urls.front.blobUrl,
-          back: urls.back.blobUrl,
-          left: urls.left.blobUrl,
-          right: urls.right.blobUrl,
-        },
+        uploadUrl,
+        blobUrl,
       },
       {
         jobId,
@@ -110,10 +100,34 @@ export class CharactersService {
       jobId,
       status: pending.status,
       profileUrl: toReadUrl(pending.profileUrl),
-      frontUrl: toReadUrl(pending.frontUrl),
-      backUrl: toReadUrl(pending.backUrl),
-      leftUrl: toReadUrl(pending.leftUrl),
-      rightUrl: toReadUrl(pending.rightUrl),
+      motionSheetUrl: toReadUrl(pending.motionSheetUrl),
     };
+  }
+
+  /** AI 서버가 모션 생성 완료/실패 시 호출 (콜백) */
+  async handleMotionCallback(jobId: string, userId: number, success: boolean): Promise<void> {
+    const pending = await this.characterPendingRepo.findOne({
+      where: { jobId, userId },
+    });
+    if (!pending) {
+      console.log('[handleMotionCallback] pending 없음, 무시:', { jobId, userId });
+      return;
+    }
+
+    if (success) {
+      const prefix = `motion/${userId}/${jobId}`;
+      const { blobUrl } = this.azureStorage.createMotionSheetUploadSasUrl(prefix);
+      await this.characterPendingRepo.update(
+        { jobId, userId },
+        { motionSheetUrl: blobUrl, status: CharacterPendingStatus.DONE },
+      );
+      console.log('[handleMotionCallback] DONE:', { jobId, userId });
+    } else {
+      await this.characterPendingRepo.update(
+        { jobId, userId },
+        { status: CharacterPendingStatus.FAILED },
+      );
+      console.log('[handleMotionCallback] FAILED:', { jobId, userId });
+    }
   }
 }

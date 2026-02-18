@@ -109,20 +109,10 @@ export class AzureStorageService {
   }
 
   /**
-   * 캐릭터용 4방향 blob에 대한 업로드 SAS URL 4개 생성
-   * @param prefix 컨테이너 안 상위 경로 (예: "userId/token")
+   * 모션 시트 1장 업로드용 SAS URL 생성
+   * @param prefix 컨테이너 안 상위 경로 (예: "motion/userId/jobId")
    */
-  createCharacterUploadSasUrls(prefix: string): {
-    front: UploadSasUrl;
-    back: UploadSasUrl;
-    left: UploadSasUrl;
-    right: UploadSasUrl;
-  } {
-    return {
-      front: this.createUploadSasUrl(`${prefix}/front.png`),
-      back: this.createUploadSasUrl(`${prefix}/back.png`),
-      left: this.createUploadSasUrl(`${prefix}/left.png`),
-      right: this.createUploadSasUrl(`${prefix}/right.png`),
-    };
+  createMotionSheetUploadSasUrl(prefix: string): UploadSasUrl {
+    return this.createUploadSasUrl(`${prefix}/sheet.png`);
   }
 }

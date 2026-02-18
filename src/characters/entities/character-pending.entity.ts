@@ -37,18 +37,9 @@ export class CharacterPending {
   @Column({ name: 'profile_url', type: 'varchar', length: 1024, comment: '프로필 1장 url' })
   profileUrl: string;
 
-  /** 4방향 URL (done 이후) */
-  @Column({ name: 'front_url', type: 'varchar', length: 1024, nullable: true, comment: '정면 url' })
-  frontUrl: string | null;
-
-  @Column({ name: 'back_url', type: 'varchar', length: 1024, nullable: true, comment: '뒤로 url' })
-  backUrl: string | null;
-
-  @Column({ name: 'left_url', type: 'varchar', length: 1024, nullable: true, comment: '왼쪽 url' })
-  leftUrl: string | null;
-
-  @Column({ name: 'right_url', type: 'varchar', length: 1024, nullable: true, comment: '오른쪽 url' })
-  rightUrl: string | null;
+  /** 모션 시트 1장 URL (done 이후, front/back/left/right 합친 시트) */
+  @Column({ name: 'motion_sheet_url', type: 'varchar', length: 1024, nullable: true, comment: '모션 시트 url' })
+  motionSheetUrl: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

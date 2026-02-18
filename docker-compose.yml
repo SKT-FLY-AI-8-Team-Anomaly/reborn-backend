@@ -37,6 +37,9 @@ services:
       REDIS_PORT: 6379
       # Docker 안에서 호스트 PC의 AI 서버 접근 (localhost → host.docker.internal)
       AI_BASE_URL: http://host.docker.internal:8000
+      # 모션 완료 콜백 - AI가 이 주소로 POST. AI가 호스트에서 실행 중이면 localhost 사용
+      MOTION_CALLBACK_BASE_URL: http://localhost:3001
+      BACKEND_PUBLIC_URL: http://host.docker.internal:3001
     depends_on:
       mysql:
         condition: service_healthy

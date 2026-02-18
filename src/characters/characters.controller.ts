@@ -62,7 +62,7 @@ export class CharactersController {
     return this.charactersService.generateProfile(userId, dto.imageBase64);
   }
 
-  /** 캐릭터 생성 (수락한 프로필로 4방향 생성 시작) */
+  /** 캐릭터 생성 (수락한 프로필로 모션 시트 생성 시작) */
   @Post()
   @UseGuards(JwtAuthGuard)
   async create(@UserId() userId: number | undefined, @Body() dto: CreateCharacterDto) {
@@ -70,6 +70,30 @@ export class CharactersController {
       throw new Error('userId is required');
     }
     return this.charactersService.accept(userId, dto.profileUrl);
+  }
+
+  /** AI 서버 콜백 - 모션 생성 완료/실패 시 호출 (JWT 없음, 내부/AI 전용) */
+  @Post('motion-callback')
+  async motionCallback(
+    @Body() body: { jobId?: string; userId?: number; success?: boolean | string },
+  ) {
+    const { jobId, userId, success: rawSuccess } = body;
+    if (jobId == null || userId == null) {
+      throw new BadRequestException('jobId, userId 필요');
+    }
+    // success: boolean 또는 "true"/"false" 문자열 허용
+    const success: boolean | undefined =
+      rawSuccess === true || rawSuccess === 'true'
+        ? true
+        : rawSuccess === false || rawSuccess === 'false'
+          ? false
+          : undefined;
+    if (success === undefined) {
+      throw new BadRequestException('success (boolean) 필요');
+    }
+    console.log('[motion-callback]', { jobId, userId, success });
+    await this.charactersService.handleMotionCallback(String(jobId), Number(userId), success);
+    return { ok: true };
   }
 
   /** 캐릭터 조회 (상태 포함) */

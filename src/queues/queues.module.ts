@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { BullBoardModule } from '@bull-board/nestjs';
+import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 
 export const MOTION_QUEUE = 'motion-queue';
 
@@ -18,6 +20,10 @@ export const MOTION_QUEUE = 'motion-queue';
       inject: [ConfigService],
     }),
     BullModule.registerQueue({ name: MOTION_QUEUE }),
+    BullBoardModule.forFeature({
+      name: MOTION_QUEUE,
+      adapter: BullMQAdapter,
+    }),
   ],
   exports: [BullModule],
 })

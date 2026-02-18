@@ -9,15 +9,15 @@ export interface ProfileGenerationRequest {
   blobUrl: string;
 }
 
-/** 4방향 모션 생성 요청 */
+/** 모션 시트 생성 요청 - AI는 200 즉시 반환 후 백그라운드 처리, 완료 시 callbackUrl 호출 */
 export interface MotionGenerationRequest {
   profileUrl: string;
-  uploadUrls: {
-    front: string;
-    back: string;
-    left: string;
-    right: string;
-  };
+  uploadUrl: string;
+  blobUrl: string;
+  /** 완료 시 POST { jobId, userId, success } 호출할 URL */
+  callbackUrl: string;
+  jobId: string;
+  userId: number;
 }
 
 @Injectable()
@@ -69,19 +69,11 @@ export class AiService {
     }
   }
 
-  /** 4방향 모션 생성 - AI가 각 blob에 업로드 */
+  /** 모션 시트 생성 - AI는 200 즉시 반환, 완료 시 callbackUrl 호출 */
   async generateMotion(req: MotionGenerationRequest): Promise<void> {
     if (this.isMock) {
-      await new Promise((r) => setTimeout(r, 5000)); // 5초 지연 (Worker 동작 확인용)
-      const profileRes = await fetch(req.profileUrl);
-      if (!profileRes.ok) {
-        throw new Error(`Failed to fetch profile: ${req.profileUrl}`);
-      }
-      const buffer = Buffer.from(await profileRes.arrayBuffer());
-      await this.putImage(req.uploadUrls.front, buffer);
-      await this.putImage(req.uploadUrls.back, buffer);
-      await this.putImage(req.uploadUrls.left, buffer);
-      await this.putImage(req.uploadUrls.right, buffer);
+      // Mock: 200 즉시 반환 후 백그라운드에서 처리하고 콜백
+      void this.runMockMotion(req);
       return;
     }
 
@@ -93,6 +85,27 @@ export class AiService {
     if (!res.ok) {
       const text = await res.text();
       throw new Error(`AI motion generation failed: ${res.status} ${text}`);
+    }
+  }
+
+  private async runMockMotion(req: MotionGenerationRequest): Promise<void> {
+    try {
+      await new Promise((r) => setTimeout(r, 5000));
+      const profileRes = await fetch(req.profileUrl);
+      if (!profileRes.ok) throw new Error(`Failed to fetch profile`);
+      const buffer = Buffer.from(await profileRes.arrayBuffer());
+      await this.putImage(req.uploadUrl, buffer);
+      await fetch(req.callbackUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId: req.jobId, userId: req.userId, success: true }),
+      });
+    } catch {
+      await fetch(req.callbackUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId: req.jobId, userId: req.userId, success: false }),
+      });
     }
   }
 }

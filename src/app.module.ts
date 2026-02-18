@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { BullBoardModule } from '@bull-board/nestjs';
+import { ExpressAdapter } from '@bull-board/express';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { User } from './users/entities/user.entity';
@@ -37,6 +39,10 @@ import { ObjectsModule } from './objects/objects.module';
         synchronize: config.get('NODE_ENV') !== 'production',
       }),
       inject: [ConfigService],
+    }),
+    BullBoardModule.forRoot({
+      route: '/queues',
+      adapter: ExpressAdapter,
     }),
     UsersModule,
     AuthModule,
