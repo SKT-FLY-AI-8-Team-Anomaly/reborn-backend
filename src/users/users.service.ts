@@ -39,7 +39,7 @@ export class UsersService {
     const user = this.userRepository.create({
       nickname: dto.nickname,
       password: hashedPassword,
-      characterimage: '',
+      characterImage: '',
     });
 
     const saved = await this.userRepository.save(user);

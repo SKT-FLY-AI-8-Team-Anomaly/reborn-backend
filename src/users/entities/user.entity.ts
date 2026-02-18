@@ -15,6 +15,6 @@ export class User {
   @Column({ comment: '비밀번호' })
   password: string;
 
-  @Column({ name: 'characterimage', comment: '캐릭터이미지 url' })
-  characterimage: string;
+  @Column({ name: 'character_image', comment: '캐릭터이미지 url' })
+  characterImage: string;
 }

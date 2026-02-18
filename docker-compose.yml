@@ -1,0 +1,46 @@
+services:
+  mysql:
+    image: mysql:8
+    container_name: reborn-mysql
+    ports:
+      - '3308:3306'  # 호스트 3308 → 컨테이너 3306 (로컬 MariaDB 3307과 충돌 방지)
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_DATABASE:-reborn}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: reborn-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
+
+  api:
+    build: .
+    container_name: reborn-api
+    ports:
+      - '3001:3000'  # 호스트 3001 → 컨테이너 3000
+    env_file: .env
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+volumes:
+  mysql-data:
+  redis-data:
