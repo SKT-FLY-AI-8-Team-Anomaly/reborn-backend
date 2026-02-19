@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Character } from './entities/character.entity';
 import { CharacterPending } from './entities/character-pending.entity';
+import { User } from '../users/entities/user.entity';
 import { CharactersController } from './characters.controller';
 import { CharactersService } from './characters.service';
 import { MotionProcessor } from './motion.processor';
@@ -10,7 +11,7 @@ import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Character, CharacterPending]),
+    TypeOrmModule.forFeature([Character, CharacterPending, User]),
     QueuesModule,
     AuthModule,
   ],

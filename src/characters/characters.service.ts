@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { Queue } from 'bullmq';
 import { randomUUID } from 'crypto';
 import { CharacterPending } from './entities/character-pending.entity';
+import { User } from '../users/entities/user.entity';
 import { CharacterPendingStatus } from './constants/character-status.enum';
 import { MOTION_QUEUE } from '../queues/queues.module';
 import { AzureStorageService } from '../azure/azure-storage.service';
@@ -18,6 +19,8 @@ export class CharactersService {
   constructor(
     @InjectRepository(CharacterPending)
     private readonly characterPendingRepo: Repository<CharacterPending>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
     @InjectQueue(MOTION_QUEUE)
     private readonly motionQueue: Queue,
     private readonly azureStorage: AzureStorageService,
@@ -33,18 +36,24 @@ export class CharactersService {
 
   /** 프로필 생성 (동기) - 이미지 파일/Buffer로 AI 호출 후 profileUrl 반환 */
   async generateProfile(userId: number, image: Buffer | string) {
+    console.log('[CharactersService.generateProfile] 진입', { userId, imageType: typeof image, bufferLength: Buffer.isBuffer(image) ? image.length : 'base64' });
     const imageBuffer = this.toImageBuffer(image);
     const blobPath = `profiles/${userId}/${randomUUID()}.png`;
+    console.log('[CharactersService.generateProfile] blobPath', blobPath);
     const { uploadUrl, blobUrl } = this.azureStorage.createUploadSasUrl(blobPath);
+    console.log('[CharactersService.generateProfile] Azure SAS 생성됨, blobUrl:', blobUrl);
 
+    console.log('[CharactersService.generateProfile] AiService.generateProfile 호출 직전');
     await this.aiService.generateProfile({
       imageBuffer,
       uploadUrl,
       blobUrl,
     });
+    console.log('[CharactersService.generateProfile] AiService.generateProfile 반환됨');
 
-    // 프론트에서 이미지 표시 가능하도록 읽기 SAS URL 반환 (DB에는 저장 안 함)
-    return { profileUrl: this.azureStorage.createReadSasUrl(blobUrl) };
+    const readUrl = this.azureStorage.createReadSasUrl(blobUrl);
+    console.log('[CharactersService.generateProfile] 응답 반환', { readUrlLength: readUrl.length });
+    return { profileUrl: readUrl };
   }
 
   /** 수락 → motion-queue에 job 추가 (모션 시트 1장 생성) */
@@ -63,6 +72,9 @@ export class CharactersService {
       status: CharacterPendingStatus.MOTION_PROCESSING,
     });
     await this.characterPendingRepo.save(pending);
+
+    // API 호출 시 전달받은 URL을 users.character_image에 바로 저장
+    await this.userRepo.update({ id: userId }, { characterImage: profileUrlForStorage });
 
     await this.motionQueue.add(
       'generate-motion',
@@ -101,11 +113,17 @@ export class CharactersService {
       status: pending.status,
       profileUrl: toReadUrl(pending.profileUrl),
       motionSheetUrl: toReadUrl(pending.motionSheetUrl),
+      errorMessage: pending.errorMessage ?? undefined,
     };
   }
 
   /** AI 서버가 모션 생성 완료/실패 시 호출 (콜백) */
-  async handleMotionCallback(jobId: string, userId: number, success: boolean): Promise<void> {
+  async handleMotionCallback(
+    jobId: string,
+    userId: number,
+    success: boolean,
+    errorMessage?: string,
+  ): Promise<void> {
     const pending = await this.characterPendingRepo.findOne({
       where: { jobId, userId },
     });
@@ -119,15 +137,15 @@ export class CharactersService {
       const { blobUrl } = this.azureStorage.createMotionSheetUploadSasUrl(prefix);
       await this.characterPendingRepo.update(
         { jobId, userId },
-        { motionSheetUrl: blobUrl, status: CharacterPendingStatus.DONE },
+        { motionSheetUrl: blobUrl, status: CharacterPendingStatus.DONE, errorMessage: null },
       );
       console.log('[handleMotionCallback] DONE:', { jobId, userId });
     } else {
       await this.characterPendingRepo.update(
         { jobId, userId },
-        { status: CharacterPendingStatus.FAILED },
+        { status: CharacterPendingStatus.FAILED, errorMessage: errorMessage ?? null },
       );
-      console.log('[handleMotionCallback] FAILED:', { jobId, userId });
+      console.log('[handleMotionCallback] FAILED:', { jobId, userId, errorMessage: errorMessage?.slice(0, 80) });
     }
   }
 }

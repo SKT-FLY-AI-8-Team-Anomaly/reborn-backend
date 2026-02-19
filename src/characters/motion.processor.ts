@@ -31,12 +31,14 @@ export class MotionProcessor extends WorkerHost {
     if (job.name !== 'generate-motion') return;
 
     const { jobId, userId, profileUrl, uploadUrl, blobUrl } = job.data;
+    console.log('[MotionProcessor] job 수신', { jobId, userId, profileUrlLen: profileUrl?.length });
 
-    // AI가 프로필 이미지를 GET할 수 있도록 읽기 SAS URL 전달
     const profileReadUrl = this.azureStorage.createReadSasUrl(profileUrl);
     const callbackUrl = this.getMotionCallbackUrl();
+    console.log('[MotionProcessor] callbackUrl', callbackUrl);
 
     try {
+      console.log('[MotionProcessor] AiService.generateMotion 호출 직전');
       await this.aiService.generateMotion({
         profileUrl: profileReadUrl,
         uploadUrl,
@@ -45,8 +47,9 @@ export class MotionProcessor extends WorkerHost {
         jobId,
         userId,
       });
-      // AI는 200 즉시 반환 후 백그라운드 처리. 완료 시 callbackUrl로 콜백 → 그때 done 처리
+      console.log('[MotionProcessor] AiService.generateMotion 반환 (AI가 백그라운드 처리 후 콜백 예정)');
     } catch (err) {
+      console.error('[MotionProcessor] generateMotion 실패', err);
       await this.characterPendingRepo.update(
         { jobId, userId },
         { status: CharacterPendingStatus.FAILED },

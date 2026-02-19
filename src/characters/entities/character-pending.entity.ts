@@ -41,6 +41,10 @@ export class CharacterPending {
   @Column({ name: 'motion_sheet_url', type: 'varchar', length: 1024, nullable: true, comment: '모션 시트 url' })
   motionSheetUrl: string | null;
 
+  /** 실패 시 AI/외부에서 전달한 에러 메시지 (프론트 표시용) */
+  @Column({ name: 'error_message', type: 'varchar', length: 512, nullable: true, comment: '실패 사유' })
+  errorMessage: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

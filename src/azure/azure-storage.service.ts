@@ -91,14 +91,16 @@ export class AzureStorageService {
     if (!blobUrl.startsWith(prefix)) {
       return blobUrl;
     }
-    const blobPath = blobUrl.slice(prefix.length);
+    const blobPath = blobUrl.replace(prefix, '').split('?')[0];
+    const now = new Date();
+    const startsOn = new Date(now.getTime() - 15 * 60 * 1000); // 15분 전 (clock skew 대비)
     const expiresOn = new Date();
     expiresOn.setMinutes(expiresOn.getMinutes() + expiryMinutes);
     const sasOptions = {
       containerName: this.containerName,
       blobName: blobPath,
       permissions: BlobSASPermissions.parse('r'), // read only
-      startsOn: new Date(),
+      startsOn,
       expiresOn,
     };
     const sasToken = generateBlobSASQueryParameters(
