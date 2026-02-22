@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
 import { UserFriend } from './entities/user-friend.entity';
@@ -88,12 +88,11 @@ export class UsersService {
       throw new ConflictException('이미 친구인 유저입니다.');
     }
 
-    await this.userFriendRepository.save(
-      this.userFriendRepository.create({
-        userId,
-        friendId: friend.id,
-      }),
-    );
+    // 양방향 친구: 나→친구, 친구→나 둘 다 저장
+    await this.userFriendRepository.save([
+      this.userFriendRepository.create({ userId, friendId: friend.id }),
+      this.userFriendRepository.create({ userId: friend.id, friendId: userId }),
+    ]);
 
     return {
       message: '친구가 추가되었습니다.',
@@ -102,19 +101,31 @@ export class UsersService {
     };
   }
 
-  /** 친구 목록 (닉네임, 프로필 URL) */
+  /** 친구 목록 (닉네임, 프로필 URL) - addFriend와 동일한 테이블/컬럼으로 조회 */
   async getFriends(
     userId: number,
   ): Promise<Array<{ friendId: number; nickname: string; profileUrl: string | null }>> {
-    const relations = await this.userFriendRepository.find({
-      where: { userId },
-      relations: ['friend'],
-    });
-    if (relations.length === 0) {
+    const uid = Number(userId);
+    if (Number.isNaN(uid)) {
       return [];
     }
 
-    const friendIds = relations.map((r) => r.friendId);
+    const raw = await this.userFriendRepository.query<{ userId: number; friendId: number }[]>(
+      'SELECT userId, friendId FROM user_friends WHERE userId = ?',
+      [uid],
+    );
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[getFriends]', { uid, rawRowCount: raw.length });
+    }
+
+    if (raw.length === 0) {
+      return [];
+    }
+
+    const friendIds = raw.map((r) => r.friendId);
+    const friends = await this.userRepository.find({ where: { id: In(friendIds) } });
+    const userById = new Map(friends.map((u) => [u.id, u]));
+
     const allChars = await this.characterRepository.find({
       where: friendIds.map((id) => ({ userId: id })),
       order: { createdAt: 'DESC' },
@@ -126,10 +137,16 @@ export class UsersService {
       }
     }
 
-    return relations.map((r) => ({
-      friendId: r.friendId,
-      nickname: r.friend.nickname,
-      profileUrl: profileByUserId.get(r.friendId) ?? null,
-    }));
+    return raw
+      .map((r) => {
+        const user = userById.get(r.friendId);
+        if (!user) return null;
+        return {
+          friendId: r.friendId,
+          nickname: user.nickname,
+          profileUrl: profileByUserId.get(r.friendId) ?? null,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x != null);
   }
 }

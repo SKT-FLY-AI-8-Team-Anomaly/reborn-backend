@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { ChatRoom } from './entities/chat-room.entity';
 import { ChatRoomParticipant } from './entities/chat-room-participant.entity';
 import { UserFriend } from '../users/entities/user-friend.entity';
@@ -62,27 +62,30 @@ export class ChatService {
   ): Promise<Array<{ roomId: number; name: string; memberCount: number }>> {
     const myParticipants = await this.participantRepo.find({
       where: { userId },
-      relations: ['room'],
     });
     if (myParticipants.length === 0) {
       return [];
     }
 
-    const roomIds = myParticipants.map((p) => p.roomId);
+    const roomIds = [...new Set(myParticipants.map((p) => p.roomId))];
+    const rooms = await this.chatRoomRepo.find({
+      where: { id: In(roomIds) },
+    });
+    const roomById = new Map(rooms.map((r) => [r.id, r]));
+
     const counts = await this.participantRepo
       .createQueryBuilder('p')
-      .select('p.room_id', 'roomId')
+      .select('p.roomId', 'roomId')
       .addSelect('COUNT(*)', 'cnt')
-      .where('p.room_id IN (:...roomIds)', { roomIds })
-      .groupBy('p.room_id')
+      .where('p.roomId IN (:...roomIds)', { roomIds })
+      .groupBy('p.roomId')
       .getRawMany<{ roomId: number; cnt: string }>();
-
     const countByRoomId = new Map(counts.map((c) => [c.roomId, Number(c.cnt)]));
 
-    return myParticipants.map((p) => ({
-      roomId: p.roomId,
-      name: p.room.name,
-      memberCount: countByRoomId.get(p.roomId) ?? 0,
+    return roomIds.map((roomId) => ({
+      roomId,
+      name: roomById.get(roomId)?.name ?? '',
+      memberCount: countByRoomId.get(roomId) ?? 0,
     }));
   }
 

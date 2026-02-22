@@ -11,6 +11,10 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.enableCors({
+    origin: true, // 개발 시 모든 origin 허용. 운영에서는 특정 도메인만 넣기 (예: ['https://example.com'])
+    credentials: true,
+  });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
