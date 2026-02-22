@@ -1,15 +1,20 @@
 # 테이블 정리 (reborn-backend)
 
+제공 스키마 기준으로 엔티티를 정리했습니다. 콜백 매칭용 `job_id`, `error_message`는 character_pending에 유지했습니다.
+
+---
+
 ## 1. users
 
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
-| id | PK (auto) | 유저 ID |
-| nickname | string | 닉네임 |
-| password | string | 비밀번호 (해시) |
-| character_image | string | 캐릭터 이미지 URL (프로필 수락 시 저장) |
+| id | BIGINT, PK, AUTO_INCREMENT | 유저 ID |
+| nickname | VARCHAR(50), NOT NULL, UNIQUE | 닉네임 |
+| password | VARCHAR(255), NOT NULL | 비밀번호 (해시) |
+| created_at | DATETIME, DEFAULT CURRENT_TIMESTAMP | 생성 시각 |
+| updated_at | DATETIME, DEFAULT ... ON UPDATE ... | 수정 시각 |
 
-- 회원가입·로그인 대상. 캐릭터 프로필 수락 시 `character_image` 갱신.
+- 캐릭터 이미지는 `characters.character_image_url`에만 저장.
 
 ---
 
@@ -17,17 +22,14 @@
 
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
-| id | PK (auto) | |
-| job_id | string (unique) | BullMQ job ID (수락 시 생성) |
-| user_id | FK → users.id | 유저 ID |
-| status | enum | motion_processing \| done \| failed |
-| profile_url | string(1024) | 프로필 1장 URL (수락 시 저장) |
-| motion_sheet_url | string(1024), nullable | 모션 시트 URL (AI 완료 후 저장) |
-| error_message | string(512), nullable | 실패 시 AI에서 전달한 에러 메시지 (프론트 표시용) |
-| created_at | datetime | 생성 시각 |
-
-- **역할:** 프로필 수락 후 모션 시트 생성 중인 작업의 진행 상태.
-- **흐름:** 수락 → status=motion_processing, AI 완료 콜백 → done + motion_sheet_url 저장 / 실패 시 failed.
+| id | BIGINT, PK, AUTO_INCREMENT | |
+| job_id | VARCHAR, UNIQUE | BullMQ job ID (콜백 매칭용, 스키마 외 추가) |
+| user_id | BIGINT, NOT NULL, FK → users.id | 유저 ID |
+| status | ENUM('pending','completed','failed') | pending \| completed \| failed |
+| profile_url | TEXT, NULL | 프로필 1장 URL |
+| motion_sheet_url | TEXT, NULL | 모션 시트 URL (완료 후) |
+| error_message | VARCHAR(512), NULL | 실패 사유 (스키마 외 추가) |
+| created_at | DATETIME, DEFAULT CURRENT_TIMESTAMP | 생성 시각 |
 
 ---
 
@@ -35,12 +37,14 @@
 
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
-| id | PK (auto) | |
-| motion_sheet_url | string | 모션 시트 URL (4방향 합친 1장) |
-| user_id | FK → users.id | 유저 ID |
+| id | BIGINT, PK, AUTO_INCREMENT | |
+| user_id | BIGINT, NOT NULL, FK → users.id | 유저 ID |
+| motion_sheet_url | TEXT, NOT NULL | 모션 시트 URL |
+| character_image_url | TEXT, NOT NULL | 캐릭터 이미지 URL |
+| character_detail_url | TEXT, NULL | 캐릭터 상세 URL |
+| created_at | DATETIME, DEFAULT CURRENT_TIMESTAMP | 생성 시각 |
 
-- **역할:** 완료된 캐릭터(모션 시트 확정) 1건 = 1행.
-- **참고:** 현재 코드에서는 `character_pending`만 사용하고, `characters` INSERT는 없을 수 있음. 필요 시 done 시 character_pending → characters 로 이관하는 로직 추가 가능.
+- 모션 완료 콜백 시 한 건 저장 (character_image_url = profile_url, motion_sheet_url = blobUrl).
 
 ---
 
@@ -48,51 +52,95 @@
 
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
-| id | PK (auto) | |
-| code | string | 게임 코드 |
-| user_id | FK → users.id | 생성한 유저 ID |
-| game | string | 게임 이름 |
-
-- 게임 마스터(1건 = 1게임).
-
----
-
-## 5. game_played
-
-| 컬럼 | 타입 | 설명 |
-|------|------|------|
-| id | PK (auto) | |
-| game_id | FK → games.id | 게임 ID |
-| play_user_id | FK → users.id | 플레이한 유저 ID |
-
-- “누가 어떤 게임을 플레이했는지” 기록.
+| id | BIGINT, PK, AUTO_INCREMENT | |
+| user_id | BIGINT, NOT NULL, FK → users.id | 유저 ID |
+| title | VARCHAR(100), NOT NULL | 게임 제목 |
+| thumbnail_url | TEXT, NULL | 썸네일 URL |
+| background_url | TEXT, NULL | 배경 URL |
+| object_scale | FLOAT, DEFAULT 1.0 | 오브젝트 스케일 |
+| created_at | DATETIME, DEFAULT CURRENT_TIMESTAMP | 생성 시각 |
 
 ---
 
-## 6. objects (game_object)
+## 5. input_source
 
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
-| id | PK (auto) | |
-| object_url | string | 오브젝트 저장 URL |
-| game_id | FK → games.id | 게임 ID |
-
-- 게임별 오브젝트(에셋) URL.
+| id | BIGINT, PK, AUTO_INCREMENT | |
+| game_id | BIGINT, NOT NULL, FK → games.id | 게임 ID |
+| content_text | TEXT, NOT NULL | 입력 텍스트 |
+| created_at | DATETIME, DEFAULT CURRENT_TIMESTAMP | 생성 시각 |
 
 ---
 
-## 7. quiz
+## 6. input_image
 
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
-| id | PK (auto) | |
-| story | string | 이야기 |
-| question | string | 질문 |
-| answer | string | 정답 |
-| game_id | FK → games.id | 게임 ID |
-| object_id | FK → objects.id | 오브젝트 ID |
+| id | BIGINT, PK, AUTO_INCREMENT | |
+| game_id | BIGINT, NOT NULL, FK → games.id | 게임 ID |
+| image_url | TEXT, NOT NULL | 이미지 URL |
+| created_at | DATETIME, DEFAULT CURRENT_TIMESTAMP | 생성 시각 |
 
-- 게임별 퀴즈(스토리·질문·정답·연결 오브젝트).
+---
+
+## 7. objects
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | BIGINT, PK, AUTO_INCREMENT | |
+| game_id | BIGINT, NOT NULL, FK → games.id | 게임 ID |
+| object_directory | VARCHAR(255), NOT NULL | 오브젝트 디렉터리/경로 |
+| name | VARCHAR(100), NOT NULL | 오브젝트 이름 |
+| x_pos | INT, NOT NULL | x 좌표 |
+| y_pos | INT, NOT NULL | y 좌표 |
+| height | INT, NOT NULL | 높이 |
+| interaction_text | TEXT, NULL | 상호작용 텍스트 |
+| outro_story | TEXT, NULL | 아웃트로 스토리 |
+| created_at | DATETIME, DEFAULT CURRENT_TIMESTAMP | 생성 시각 |
+
+---
+
+## 8. quiz
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | BIGINT, PK, AUTO_INCREMENT | |
+| object_id | BIGINT, NOT NULL, FK → objects.id | 오브젝트 ID |
+| story | TEXT, NOT NULL | 이야기 |
+| question | TEXT, NOT NULL | 질문 |
+| answer | VARCHAR(255), NOT NULL | 정답 |
+| created_at | DATETIME, DEFAULT CURRENT_TIMESTAMP | 생성 시각 |
+
+- 퀴즈는 object에 종속 (quiz_id는 posts에서 제거 권장).
+
+---
+
+## 9. posts
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | BIGINT, PK, AUTO_INCREMENT | |
+| user_id | BIGINT, NOT NULL, FK → users.id | 유저 ID |
+| game_id | BIGINT, NOT NULL, FK → games.id | 게임 ID |
+| content_text | TEXT, NOT NULL | 내용 텍스트 |
+| match_rate | FLOAT, NULL | 매칭률 |
+| created_at | DATETIME, DEFAULT CURRENT_TIMESTAMP | 생성 시각 |
+
+- quiz_id 없음 (퀴즈는 object에 종속).
+
+---
+
+## 10. game_played
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | BIGINT, PK, AUTO_INCREMENT | |
+| game_id | BIGINT, NOT NULL, FK → games.id | 게임 ID |
+| played_user_id | BIGINT, NOT NULL, FK → users.id | 플레이한 유저 ID |
+| score | INT, NULL | 점수 |
+| play_time_seconds | INT, NULL | 플레이 시간(초) |
+| created_at | DATETIME, DEFAULT CURRENT_TIMESTAMP | 생성 시각 |
 
 ---
 
@@ -100,15 +148,22 @@
 
 ```
 users
-  ├── character_pending (user_id)  … 모션 생성 중인 작업
-  ├── characters (user_id)        … 완료된 캐릭터
-  └── games (user_id)             … 생성한 게임
+  ├── games (user_id)
+  │     ├── input_source (game_id)
+  │     └── input_image (game_id)
+  ├── posts (user_id)
+  ├── characters (user_id)
+  └── character_pending (user_id)
 
 games
-  ├── game_played (game_id)       … 플레이 기록
-  ├── objects (game_id)           … 게임 오브젝트
-  └── quiz (game_id)              … 퀴즈
+  ├── objects (game_id)
+  │     └── quiz (object_id)
+  ├── input_source (game_id)
+  ├── input_image (game_id)
+  ├── posts (game_id)
+  └── game_played (game_id)
 
-objects
-  └── quiz (object_id)            … 퀴즈에 연결된 오브젝트
+game_played
+  ├── game_id → games
+  └── played_user_id → users
 ```

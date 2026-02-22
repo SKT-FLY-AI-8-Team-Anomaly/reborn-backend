@@ -28,8 +28,8 @@ export class CharacterPending {
   @Column({
     type: 'varchar',
     length: 32,
-    default: CharacterPendingStatus.MOTION_PROCESSING,
-    comment: 'motion_processing | done | failed',
+    default: CharacterPendingStatus.PENDING,
+    comment: 'pending | completed | failed',
   })
   status: CharacterPendingStatus;
 

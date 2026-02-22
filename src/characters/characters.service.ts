@@ -7,8 +7,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Queue } from 'bullmq';
 import { randomUUID } from 'crypto';
+import { Character } from './entities/character.entity';
 import { CharacterPending } from './entities/character-pending.entity';
-import { User } from '../users/entities/user.entity';
 import { CharacterPendingStatus } from './constants/character-status.enum';
 import { MOTION_QUEUE } from '../queues/queues.module';
 import { AzureStorageService } from '../azure/azure-storage.service';
@@ -19,8 +19,8 @@ export class CharactersService {
   constructor(
     @InjectRepository(CharacterPending)
     private readonly characterPendingRepo: Repository<CharacterPending>,
-    @InjectRepository(User)
-    private readonly userRepo: Repository<User>,
+    @InjectRepository(Character)
+    private readonly characterRepo: Repository<Character>,
     @InjectQueue(MOTION_QUEUE)
     private readonly motionQueue: Queue,
     private readonly azureStorage: AzureStorageService,
@@ -62,26 +62,24 @@ export class CharactersService {
     const prefix = `motion/${userId}/${jobId}`;
     const { uploadUrl, blobUrl } = this.azureStorage.createMotionSheetUploadSasUrl(prefix);
 
-    // SAS가 붙은 URL이 와도 DB에는 blob 기본 URL만 저장
-    const profileUrlForStorage = profileUrl.split('?')[0];
+    // DB에는 바로 접근 가능한 URL(읽기 SAS 포함)로 저장
+    const profileUrlBase = profileUrl.split('?')[0];
+    const profileUrlRead = this.azureStorage.createReadSasUrl(profileUrlBase);
 
     const pending = this.characterPendingRepo.create({
       jobId,
       userId,
-      profileUrl: profileUrlForStorage,
-      status: CharacterPendingStatus.MOTION_PROCESSING,
+      profileUrl: profileUrlRead,
+      status: CharacterPendingStatus.PENDING,
     });
     await this.characterPendingRepo.save(pending);
-
-    // API 호출 시 전달받은 URL을 users.character_image에 바로 저장
-    await this.userRepo.update({ id: userId }, { characterImage: profileUrlForStorage });
 
     await this.motionQueue.add(
       'generate-motion',
       {
         jobId,
         userId,
-        profileUrl: profileUrlForStorage,
+        profileUrl: profileUrlBase,
         uploadUrl,
         blobUrl,
       },
@@ -104,9 +102,9 @@ export class CharactersService {
       throw new NotFoundException('대기 중인 캐릭터를 찾을 수 없습니다.');
     }
 
-    // 프론트에서 이미지 표시 가능하도록 읽기 SAS URL로 반환
+    // DB에 이미 읽기 SAS URL로 저장돼 있으면 그대로, 아니면 SAS 붙여서 반환
     const toReadUrl = (url: string | null) =>
-      url ? this.azureStorage.createReadSasUrl(url) : null;
+      url ? (url.includes('?') ? url : this.azureStorage.createReadSasUrl(url)) : null;
 
     return {
       jobId,
@@ -135,9 +133,23 @@ export class CharactersService {
     if (success) {
       const prefix = `motion/${userId}/${jobId}`;
       const { blobUrl } = this.azureStorage.createMotionSheetUploadSasUrl(prefix);
+      const motionSheetReadUrl = this.azureStorage.createReadSasUrl(blobUrl);
+      const profileReadUrl = pending.profileUrl.includes('?')
+        ? pending.profileUrl
+        : this.azureStorage.createReadSasUrl(pending.profileUrl);
+
       await this.characterPendingRepo.update(
         { jobId, userId },
-        { motionSheetUrl: blobUrl, status: CharacterPendingStatus.DONE, errorMessage: null },
+        { motionSheetUrl: motionSheetReadUrl, status: CharacterPendingStatus.COMPLETED, errorMessage: null },
+      );
+      // characters 테이블에 바로 접근 가능한 URL로 저장
+      await this.characterRepo.save(
+        this.characterRepo.create({
+          userId,
+          motionSheetUrl: motionSheetReadUrl,
+          characterImageUrl: profileReadUrl,
+          characterDetailUrl: null,
+        }),
       );
       console.log('[handleMotionCallback] DONE:', { jobId, userId });
     } else {

@@ -1,9 +1,9 @@
-/** CharacterPending 상태 (수락 후 4방향 생성) */
+/** CharacterPending 상태 (스키마: pending | completed | failed) */
 export enum CharacterPendingStatus {
-  /** 모션 4방향 생성 중 */
-  MOTION_PROCESSING = 'motion_processing',
+  /** 대기/처리 중 */
+  PENDING = 'pending',
   /** 완료 */
-  DONE = 'done',
+  COMPLETED = 'completed',
   /** 실패 */
   FAILED = 'failed',
 }
