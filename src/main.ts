@@ -7,10 +7,15 @@ loadEnv({ path: resolve(__dirname, '../.env') });
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as express from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  // AI 콜백이 큰 JSON(files, file_urls 등) 보낼 수 있으므로 제한 완화 (기본 100kb → 10mb)
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
   app.enableCors({
     origin: true, // 개발 시 모든 origin 허용. 운영에서는 특정 도메인만 넣기 (예: ['https://example.com'])
     credentials: true,
@@ -34,6 +39,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  await app.listen(process.env.PORT ?? 3000);
+  const port = parseInt(String(process.env.PORT ?? 3000), 10);
+  await app.listen(port, '0.0.0.0');
 }
 bootstrap();

@@ -20,6 +20,14 @@ export interface MotionGenerationRequest {
   userId: number;
 }
 
+/** 게임 생성 요청 - AI에 session_id, text, storage_url, images 전달 (콜백 없음) */
+export interface GameWithPreviewRequest {
+  sessionId: string;
+  text?: string;
+  storageUrl: string;
+  imageFiles?: Array<{ buffer: Buffer; mimetype: string; originalname: string }>;
+}
+
 @Injectable()
 export class AiService {
   private readonly baseUrl: string;
@@ -164,5 +172,56 @@ export class AiService {
         body: JSON.stringify({ jobId: req.jobId, userId: req.userId, success: false }),
       });
     }
+  }
+
+  /**
+   * 게임 생성 (multipart). AI는 202 즉시 반환 후 storage_url에 파일 업로드.
+   * 반드시 multipart/form-data로만 호출. 필드명: session_id, text, storage_url, images.
+   * docs/BACKEND_SPEC.md "백엔드가 주의할 점" 참고.
+   */
+  async generateGameWithPreview(
+    req: GameWithPreviewRequest,
+  ): Promise<Record<string, unknown>> {
+    const customUrl = this.config.get('AI_GAME_GENERATION_URL', '')?.trim();
+    const url = customUrl || `${this.baseUrl}/v1/games/generate-multipart`;
+    if (this.isMock) {
+      return { session_id: req.sessionId, accepted: true };
+    }
+    const form = new FormData();
+    // 필드명 정확히 session_id, text, storage_url, images (소문자·밑줄만). JSON 따옴표/이스케이프 넣지 말고 값만.
+    const sessionId = typeof req.sessionId === 'string' ? String(req.sessionId).trim() : '';
+    const textRaw = req.text != null ? String(req.text) : '';
+    form.append('session_id', sessionId);
+    form.append('text', textRaw);
+    // storage_url 끝에 / 없이 전송 (Blob 경로 꼬임 방지)
+    const storageUrlNoSlash = String(req.storageUrl ?? '').replace(/\/+$/, '');
+    form.append('storage_url', storageUrlNoSlash);
+    // images는 반드시 파일 part로, 필드 이름은 'images'. 경로/문자열이 아닌 바이너리만.
+    const imageFiles = Array.isArray(req.imageFiles) ? req.imageFiles : [];
+    for (let i = 0; i < imageFiles.length; i++) {
+      const f = imageFiles[i];
+      if (!f?.buffer) continue;
+      const mimetype = (f.mimetype && f.mimetype.trim()) || 'image/png';
+      const filename = (f.originalname && f.originalname.trim()) || `image${i}.png`;
+      form.append(
+        'images',
+        new Blob([new Uint8Array(f.buffer)], { type: mimetype }),
+        filename,
+      );
+    }
+    // Content-Type 헤더 설정하지 않음 → fetch가 multipart/form-data; boundary=... 자동 설정 (422 방지)
+    const res = await fetch(url, { method: 'POST', body: form });
+    if (res.status !== 200 && res.status !== 202) {
+      const text = await res.text();
+      throw new Error(`AI game generation failed: ${res.status} ${text}`);
+    }
+    const contentType = res.headers.get('content-type') || '';
+    if (res.status === 202) {
+      const text = await res.text();
+      const data = text && contentType.includes('application/json') ? JSON.parse(text) : {};
+      return { session_id: req.sessionId, accepted: true, ...data };
+    }
+    const text = await res.text();
+    return (text && contentType.includes('application/json') ? JSON.parse(text) : { session_id: req.sessionId }) as Record<string, unknown>;
   }
 }

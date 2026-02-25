@@ -8,6 +8,7 @@ import { AppService } from './app.service';
 import { User } from './users/entities/user.entity';
 import { UserFriend } from './users/entities/user-friend.entity';
 import { Game } from './games/entities/game.entity';
+import { GameGenerationPending } from './games/entities/game-generation-pending.entity';
 import { InputSource } from './games/entities/input-source.entity';
 import { InputImage } from './games/entities/input-image.entity';
 import { Character } from './characters/entities/character.entity';
@@ -47,6 +48,7 @@ import { ChatModule } from './chat/chat.module';
           User,
           UserFriend,
           Game,
+          GameGenerationPending,
           InputSource,
           InputImage,
           Character,

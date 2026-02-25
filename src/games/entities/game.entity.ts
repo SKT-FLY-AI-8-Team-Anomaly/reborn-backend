@@ -32,7 +32,25 @@ export class Game {
   @Column({ name: 'background_url', type: 'text', nullable: true, comment: '배경 url' })
   backgroundUrl: string | null;
 
-  @Column({ name: 'object_scale', type: 'float', default: 1.0, comment: '오브젝트 스케일' })
+  @Column({ name: 'game_code', type: 'varchar', length: 100, nullable: true, comment: 'AI 생성 게임 코드' })
+  gameCode: string | null;
+
+  @Column({ name: 'storage_url', type: 'text', nullable: true, comment: '게임 blob 저장소 base URL' })
+  storageUrl: string | null;
+
+  @Column({ name: 'layout_json_url', type: 'text', nullable: true, comment: 'layout.json blob URL (play 시 fetch)' })
+  layoutJsonUrl: string | null;
+
+  @Column({ name: 'result_json_url', type: 'text', nullable: true, comment: 'result.json blob URL (play 시 fetch)' })
+  resultJsonUrl: string | null;
+
+  @Column({ type: 'varchar', length: 10, nullable: true, comment: '언어 코드 (예: ko)' })
+  language: string | null;
+
+  @Column({ name: 'preview_json', type: 'text', nullable: true, comment: 'preview 객체 JSON' })
+  previewJson: string | null;
+
+  @Column({ name: 'object_scale', type: 'float', default: 1.0, comment: '오브젝트 스케일 (layout 없을 때 fallback)' })
   objectScale: number;
 
   @CreateDateColumn({ name: 'created_at' })

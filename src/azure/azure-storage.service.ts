@@ -18,6 +18,8 @@ export interface UploadSasUrl {
 export class AzureStorageService {
   private readonly credential: StorageSharedKeyCredential;
   private readonly containerName: string;
+  /** 게임 생성물 업로드용 컨테이너 (예: generated-games) */
+  private readonly gamesContainerName: string;
   private readonly sasExpiryMinutes: number;
   private readonly accountName: string;
 
@@ -33,6 +35,10 @@ export class AzureStorageService {
     this.containerName = this.config.get(
       'AZURE_STORAGE_CONTAINER_NAME',
       'character',
+    );
+    this.gamesContainerName = this.config.get(
+      'AZURE_STORAGE_GAMES_CONTAINER_NAME',
+      'generated-games',
     );
     this.sasExpiryMinutes = parseInt(
       this.config.get('AZURE_SAS_EXPIRY_MINUTES', '60'),
@@ -80,26 +86,33 @@ export class AzureStorageService {
 
   /**
    * 저장된 blob URL에 읽기 전용 SAS를 붙여 프론트에서 접근 가능한 URL 반환
-   * @param blobUrl DB에 저장된 blob URL (예: https://account.../container/profiles/2/uuid.png)
+   * character, generated-games 등 동일 계정 컨테이너 URL 지원
+   * @param blobUrl DB에 저장된 blob URL (예: https://account.../container/... 또는 .../generated-games/게임코드/...)
    * @param expiryMinutes 유효 시간 (기본 1년)
    */
   createReadSasUrl(
     blobUrl: string,
     expiryMinutes: number = AzureStorageService.READ_SAS_EXPIRY_MINUTES,
   ): string {
-    const prefix = `https://${this.accountName}.blob.core.windows.net/${this.containerName}/`;
-    if (!blobUrl.startsWith(prefix)) {
+    const base = `https://${this.accountName}.blob.core.windows.net/`;
+    if (!blobUrl.startsWith(base)) {
       return blobUrl;
     }
-    const blobPath = blobUrl.replace(prefix, '').split('?')[0];
+    const pathWithoutQuery = blobUrl.split('?')[0];
+    const pathAfterContainer = pathWithoutQuery.slice(base.length);
+    const slashIdx = pathAfterContainer.indexOf('/');
+    if (slashIdx === -1) return blobUrl;
+    const containerName = pathAfterContainer.slice(0, slashIdx);
+    const blobPath = pathAfterContainer.slice(slashIdx + 1);
+    if (!blobPath) return blobUrl;
     const now = new Date();
-    const startsOn = new Date(now.getTime() - 15 * 60 * 1000); // 15분 전 (clock skew 대비)
+    const startsOn = new Date(now.getTime() - 15 * 60 * 1000);
     const expiresOn = new Date();
     expiresOn.setMinutes(expiresOn.getMinutes() + expiryMinutes);
     const sasOptions = {
-      containerName: this.containerName,
+      containerName,
       blobName: blobPath,
-      permissions: BlobSASPermissions.parse('r'), // read only
+      permissions: BlobSASPermissions.parse('r'),
       startsOn,
       expiresOn,
     };
@@ -107,7 +120,7 @@ export class AzureStorageService {
       sasOptions,
       this.credential,
     ).toString();
-    return `${blobUrl}?${sasToken}`;
+    return `${pathWithoutQuery}?${sasToken}`;
   }
 
   /**
@@ -116,5 +129,17 @@ export class AzureStorageService {
    */
   createMotionSheetUploadSasUrl(prefix: string): UploadSasUrl {
     return this.createUploadSasUrl(`${prefix}/sheet.png`);
+  }
+
+  /**
+   * 게임 생성용 blob base URL (AI 업로드용)
+   * 형태: https://{account}.blob.core.windows.net/generated-games/{게임코드}/
+   * @param _userId 사용하지 않음 (호환성 유지)
+   * @param sessionId 게임 코드(세션 ID)
+   */
+  getGameStorageBaseUrl(_userId: number, sessionId: string): string {
+    const path = sessionId.replace(/^\/+|\/+$/g, '');
+    const base = `https://${this.accountName}.blob.core.windows.net/${this.gamesContainerName}/${path}`;
+    return base.endsWith('/') ? base : base + '/';
   }
 }
