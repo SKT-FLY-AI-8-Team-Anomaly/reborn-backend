@@ -25,7 +25,11 @@ export interface GameWithPreviewRequest {
   sessionId: string;
   text?: string;
   storageUrl: string;
-  imageFiles?: Array<{ buffer: Buffer; mimetype: string; originalname: string }>;
+  imageFiles?: Array<{
+    buffer: Buffer;
+    mimetype: string;
+    originalname: string;
+  }>;
 }
 
 @Injectable()
@@ -38,10 +42,14 @@ export class AiService {
       this.config.get('AI_BASE_URL', 'http://localhost:8000'),
     ).trim();
     // 보이지 않는 문자·제로폭 공백 제거 (복사 시 붙을 수 있음)
-    this.baseUrl = raw.replace(/[\s\u200B-\u200D\u2060\uFEFF]+/g, '').replace(/\/+$/, '');
-    this.isMock =
-      this.config.get('AI_MOCK', 'false').toLowerCase() === 'true';
-    console.log('[AiService] 초기화', { baseUrl: this.baseUrl, isMock: this.isMock });
+    this.baseUrl = raw
+      .replace(/[\s\u200B-\u200D\u2060\uFEFF]+/g, '')
+      .replace(/\/+$/, '');
+    this.isMock = this.config.get('AI_MOCK', 'false').toLowerCase() === 'true';
+    console.log('[AiService] 초기화', {
+      baseUrl: this.baseUrl,
+      isMock: this.isMock,
+    });
     if (this.baseUrl.includes(':3001')) {
       console.warn(
         '[AiService] AI_BASE_URL이 백엔드(3001)를 가리킵니다. 로컬 AI 서버 주소(예: :8000)로 설정하세요.',
@@ -79,11 +87,15 @@ export class AiService {
     });
 
     const form = new FormData();
-    form.append('image', new Blob([new Uint8Array(imageBuffer)], { type: 'image/png' }), 'image.png');
+    form.append(
+      'image',
+      new Blob([new Uint8Array(imageBuffer)], { type: 'image/png' }),
+      'image.png',
+    );
     form.append('uploadUrl', uploadUrl);
     form.append('blobUrl', blobUrl);
 
-    const timeoutMs = 60_000;
+    const timeoutMs = 1800_000;
     const ac = new AbortController();
     const timeoutId = setTimeout(() => {
       ac.abort();
@@ -99,17 +111,29 @@ export class AiService {
         signal: ac.signal,
       });
       clearTimeout(timeoutId);
-      console.log('[AiService.generateProfile] fetch 반환', { status: res.status, elapsed: Date.now() - t0 });
+      console.log('[AiService.generateProfile] fetch 반환', {
+        status: res.status,
+        elapsed: Date.now() - t0,
+      });
     } catch (err) {
       clearTimeout(timeoutId);
       const msg = err instanceof Error ? err.message : String(err);
-      const cause = err instanceof Error ? (err as Error & { cause?: NodeJS.ErrnoException }).cause : null;
-      const code = cause && typeof cause === 'object' && 'code' in cause ? (cause as NodeJS.ErrnoException).code : undefined;
+      const cause =
+        err instanceof Error
+          ? (err as Error & { cause?: NodeJS.ErrnoException }).cause
+          : null;
+      const code =
+        cause && typeof cause === 'object' && 'code' in cause
+          ? (cause as NodeJS.ErrnoException).code
+          : undefined;
       const elapsed = Date.now() - t0;
       console.error('[AiService.generateProfile] fetch 예외', {
         message: msg,
         code,
-        causeMessage: cause && typeof cause === 'object' && 'message' in cause ? (cause as Error).message : undefined,
+        causeMessage:
+          cause && typeof cause === 'object' && 'message' in cause
+            ? (cause as Error).message
+            : undefined,
         elapsed,
         url: profileUrl,
       });
@@ -125,7 +149,10 @@ export class AiService {
     }
     if (!res.ok) {
       const text = await res.text();
-      console.error('[AiService.generateProfile] AI 서버 에러', { status: res.status, bodyPreview: text.slice(0, 200) });
+      console.error('[AiService.generateProfile] AI 서버 에러', {
+        status: res.status,
+        bodyPreview: text.slice(0, 200),
+      });
       throw new Error(`AI profile generation failed: ${res.status} ${text}`);
     }
     console.log('[AiService.generateProfile] 성공', res.status);
@@ -134,7 +161,12 @@ export class AiService {
   /** 모션 시트 생성 - AI는 200 즉시 반환, 완료 시 callbackUrl 호출 */
   async generateMotion(req: MotionGenerationRequest): Promise<void> {
     const motionUrl = `${this.baseUrl}/motion`;
-    console.log('[AiService.generateMotion] 시작', { url: motionUrl, jobId: req.jobId, userId: req.userId, isMock: this.isMock });
+    console.log('[AiService.generateMotion] 시작', {
+      url: motionUrl,
+      jobId: req.jobId,
+      userId: req.userId,
+      isMock: this.isMock,
+    });
     if (this.isMock) {
       void this.runMockMotion(req);
       return;
@@ -147,7 +179,10 @@ export class AiService {
     });
     if (!res.ok) {
       const text = await res.text();
-      console.error('[AiService.generateMotion] AI 서버 에러', { status: res.status, bodyPreview: text.slice(0, 200) });
+      console.error('[AiService.generateMotion] AI 서버 에러', {
+        status: res.status,
+        bodyPreview: text.slice(0, 200),
+      });
       throw new Error(`AI motion generation failed: ${res.status} ${text}`);
     }
     console.log('[AiService.generateMotion] 200 반환됨');
@@ -163,13 +198,21 @@ export class AiService {
       await fetch(req.callbackUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId: req.jobId, userId: req.userId, success: true }),
+        body: JSON.stringify({
+          jobId: req.jobId,
+          userId: req.userId,
+          success: true,
+        }),
       });
     } catch {
       await fetch(req.callbackUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId: req.jobId, userId: req.userId, success: false }),
+        body: JSON.stringify({
+          jobId: req.jobId,
+          userId: req.userId,
+          success: false,
+        }),
       });
     }
   }
@@ -189,7 +232,8 @@ export class AiService {
     }
     const form = new FormData();
     // 필드명 정확히 session_id, text, storage_url, images (소문자·밑줄만). JSON 따옴표/이스케이프 넣지 말고 값만.
-    const sessionId = typeof req.sessionId === 'string' ? String(req.sessionId).trim() : '';
+    const sessionId =
+      typeof req.sessionId === 'string' ? String(req.sessionId).trim() : '';
     const textRaw = req.text != null ? String(req.text) : '';
     form.append('session_id', sessionId);
     form.append('text', textRaw);
@@ -202,7 +246,8 @@ export class AiService {
       const f = imageFiles[i];
       if (!f?.buffer) continue;
       const mimetype = (f.mimetype && f.mimetype.trim()) || 'image/png';
-      const filename = (f.originalname && f.originalname.trim()) || `image${i}.png`;
+      const filename =
+        (f.originalname && f.originalname.trim()) || `image${i}.png`;
       form.append(
         'images',
         new Blob([new Uint8Array(f.buffer)], { type: mimetype }),
@@ -218,10 +263,17 @@ export class AiService {
     const contentType = res.headers.get('content-type') || '';
     if (res.status === 202) {
       const text = await res.text();
-      const data = text && contentType.includes('application/json') ? JSON.parse(text) : {};
+      const data =
+        text && contentType.includes('application/json')
+          ? JSON.parse(text)
+          : {};
       return { session_id: req.sessionId, accepted: true, ...data };
     }
     const text = await res.text();
-    return (text && contentType.includes('application/json') ? JSON.parse(text) : { session_id: req.sessionId }) as Record<string, unknown>;
+    return (
+      text && contentType.includes('application/json')
+        ? JSON.parse(text)
+        : { session_id: req.sessionId }
+    ) as Record<string, unknown>;
   }
 }

@@ -77,9 +77,9 @@ export class CharactersController {
     return this.charactersService.accept(userId, dto.profileUrl);
   }
 
-  /** AI 서버 콜백 - 모션 생성 완료/실패 시 호출 (JWT 없음, 내부/AI 전용) */
+  /** AI 서버 콜백 - 모션 생성 완료/실패 시 호출 (JWT 없음). 즉시 200 반환 후 백그라운드 처리해 AI 쪽 ReadError 방지 */
   @Post('motion-callback')
-  async motionCallback(
+  motionCallback(
     @Body() body: { jobId?: string; userId?: number; success?: boolean | string; error?: string },
   ) {
     const { jobId, userId, success: rawSuccess, error: errorMessage } = body;
@@ -96,12 +96,16 @@ export class CharactersController {
       throw new BadRequestException('success (boolean) 필요');
     }
     console.log('[motion-callback]', { jobId, userId, success, errorPreview: errorMessage?.slice(0, 80) });
-    await this.charactersService.handleMotionCallback(
-      String(jobId),
-      Number(userId),
-      success,
-      typeof errorMessage === 'string' ? errorMessage.slice(0, 512) : undefined,
-    );
+    this.charactersService
+      .handleMotionCallback(
+        String(jobId),
+        Number(userId),
+        success,
+        typeof errorMessage === 'string' ? errorMessage.slice(0, 512) : undefined,
+      )
+      .catch((err) =>
+        console.error('[motion-callback] background 처리 실패', { jobId, userId, err: err?.message ?? err }),
+      );
     return { ok: true };
   }
 

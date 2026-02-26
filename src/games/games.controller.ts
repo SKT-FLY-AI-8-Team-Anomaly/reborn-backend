@@ -7,9 +7,11 @@ import {
   ParseIntPipe,
   Post,
   Req,
+  Res,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import 'multer';
@@ -82,6 +84,30 @@ export class GamesController {
         originalname: f.originalname || 'image.png',
       })),
     });
+  }
+
+  /** 게임 실행: game id → input_file_url에서 input.json 로드 후, JWT user의 character로 userNickname·playerSheet·characterDetail1/2 덮어씌워 반환 */
+  @Get(':id/run')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: '게임 실행 페이로드',
+    description:
+      'game id로 Game 조회 → input_file_url에서 input.json fetch → JWT 유저의 character로 userNickname, playerSheet, characterDetail1, characterDetail2 치환 후 JSON 반환.',
+  })
+  @ApiResponse({ status: 200, description: 'input.json 구조 (일부 필드 치환됨)' })
+  @ApiResponse({ status: 404, description: '게임 없음 / input_file_url 없음 / input.json 로드 실패' })
+  @ApiResponse({ status: 401, description: '인증 필요' })
+  async getGameRun(
+    @Param('id', ParseIntPipe) gameId: number,
+    @UserId() userId: number | undefined,
+    @Res({ passthrough: false }) res: Response,
+  ): Promise<void> {
+    if (userId == null) {
+      throw new BadRequestException('로그인이 필요합니다.');
+    }
+    const payload = await this.gamesService.getGameRunPayload(gameId, userId);
+    res.json(payload);
   }
 
   /** 게임 코드로 실행 데이터 조회 (background, object, layout.json, result.json 등 불러오기) */

@@ -53,6 +53,9 @@ export class Game {
   @Column({ name: 'object_scale', type: 'float', default: 1.0, comment: '오브젝트 스케일 (layout 없을 때 fallback)' })
   objectScale: number;
 
+  @Column({ name: 'input_file_url', type: 'text', nullable: true, comment: '입력 파일(이미지 등) URL' })
+  inputFileUrl: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

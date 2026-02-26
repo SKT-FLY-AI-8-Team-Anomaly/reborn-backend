@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   BlobSASPermissions,
+  BlobServiceClient,
   generateBlobSASQueryParameters,
   StorageSharedKeyCredential,
 } from '@azure/storage-blob';
@@ -141,5 +142,44 @@ export class AzureStorageService {
     const path = sessionId.replace(/^\/+|\/+$/g, '');
     const base = `https://${this.accountName}.blob.core.windows.net/${this.gamesContainerName}/${path}`;
     return base.endsWith('/') ? base : base + '/';
+  }
+
+  /**
+   * generated-games 컨테이너에 버퍼 업로드 후 blob URL 반환.
+   * 연결 문자열로 BlobServiceClient 생성 후 컨테이너 없으면 생성.
+   */
+  async uploadToGamesContainer(
+    blobPath: string,
+    buffer: Buffer,
+    contentType: string = 'image/png',
+  ): Promise<string> {
+    const conn = String(this.config.get('AZURE_STORAGE_CONNECTION_STRING') ?? '').trim();
+    if (!conn || !conn.includes('AccountKey=')) {
+      throw new Error(
+        'AZURE_STORAGE_CONNECTION_STRING이 설정되지 않았습니다. .env 및 Docker env_file 확인.',
+      );
+    }
+    const normalizedPath = blobPath.replace(/^\/+/, '');
+    const containerName = this.gamesContainerName;
+    try {
+      const blobServiceClient = BlobServiceClient.fromConnectionString(conn);
+      const containerClient = blobServiceClient.getContainerClient(containerName);
+      await containerClient.createIfNotExists();
+      const blockBlobClient = containerClient.getBlockBlobClient(normalizedPath);
+      await blockBlobClient.uploadData(buffer, {
+        blobHTTPHeaders: { blobContentType: contentType },
+      });
+      const base = blobServiceClient.url.replace(/\/$/, '');
+      return `${base}/${containerName}/${normalizedPath}`;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('does not exist') || msg.includes('ResourceNotFound')) {
+        throw new Error(
+          `Azure Blob 리소스 없음. 스토리지 계정·연결 문자열 확인. ` +
+            `컨테이너 "${containerName}" 생성 시도함. 원인: ${msg}`,
+        );
+      }
+      throw err;
+    }
   }
 }

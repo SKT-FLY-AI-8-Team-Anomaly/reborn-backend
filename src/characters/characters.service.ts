@@ -62,14 +62,16 @@ export class CharactersService {
     const prefix = `motion/${userId}/${jobId}`;
     const { uploadUrl, blobUrl } = this.azureStorage.createMotionSheetUploadSasUrl(prefix);
 
-    // DB에는 바로 접근 가능한 URL(읽기 SAS 포함)로 저장
+    // DB에는 바로 읽을 수 있는 URL(읽기 SAS)로 저장
     const profileUrlBase = profileUrl.split('?')[0];
     const profileUrlRead = this.azureStorage.createReadSasUrl(profileUrlBase);
+    const motionSheetReadUrl = this.azureStorage.createReadSasUrl(blobUrl);
 
     const pending = this.characterPendingRepo.create({
       jobId,
       userId,
       profileUrl: profileUrlRead,
+      motionSheetUrl: motionSheetReadUrl,
       status: CharacterPendingStatus.PENDING,
     });
     await this.characterPendingRepo.save(pending);

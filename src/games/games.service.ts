@@ -537,4 +537,55 @@ export class GamesService {
       interactiveObjects,
     };
   }
+
+  /**
+   * 게임 실행 API. input_file_url에서 input.json 전체를 그대로 가져와,
+   * 채울 값은 userNickname, playerSheet, characterDetail1, characterDetail2 네 개뿐이고
+   * 나머지는 input.json 내용·형태 그대로 반환.
+   */
+  async getGameRunPayload(
+    gameId: number,
+    userId: number,
+  ): Promise<Record<string, unknown>> {
+    const game = await this.gameRepo.findOne({
+      where: { id: gameId },
+    });
+    if (!game) {
+      throw new NotFoundException(`게임을 찾을 수 없습니다. (id: ${gameId})`);
+    }
+    const inputFileUrl = game.inputFileUrl?.trim();
+    if (!inputFileUrl) {
+      throw new NotFoundException(
+        `해당 게임에 input_file_url이 없습니다. (id: ${gameId})`,
+      );
+    }
+    const fetchUrl = this.azureStorage.createReadSasUrl(inputFileUrl);
+    const res = await fetch(fetchUrl);
+    if (!res.ok) {
+      throw new NotFoundException(
+        `input.json을 불러올 수 없습니다. (${res.status})`,
+      );
+    }
+    const raw = (await res.json()) as Record<string, unknown>;
+    const payload = JSON.parse(JSON.stringify(raw)) as Record<string, unknown>;
+
+    const character = await this.characterRepo.findOne({
+      where: { userId },
+      relations: ['user'],
+      order: { id: 'DESC' },
+    });
+
+    if (character?.user) {
+      payload.userNickname = character.user.nickname;
+    }
+    if (character && payload.assets && typeof payload.assets === 'object') {
+      const assets = payload.assets as Record<string, unknown>;
+      assets.playerSheet = character.motionSheetUrl;
+      assets.characterDetail1 = character.characterImageUrl;
+      assets.characterDetail2 =
+        character.characterDetailUrl ?? character.characterImageUrl;
+    }
+
+    return payload;
+  }
 }
